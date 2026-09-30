@@ -1,0 +1,30 @@
+name: 파트너스 링크 시험
+
+on:
+  workflow_dispatch:
+    inputs:
+      coupang_url:
+        description: 변환할 쿠팡 URL (첫 실행은 기본값 사용)
+        required: true
+        default: https://www.coupang.com/np/coupangglobal
+
+permissions:
+  contents: read
+
+jobs:
+  link-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: 코드 검사
+        run: node --test
+      - name: 쿠팡 링크 한 건 변환
+        env:
+          COUPANG_ACCESS_KEY: ${{ secrets.COUPANG_ACCESS_KEY }}
+          COUPANG_SECRET_KEY: ${{ secrets.COUPANG_SECRET_KEY }}
+          COUPANG_URL: ${{ inputs.coupang_url }}
+        run: node src/deeplink.mjs
