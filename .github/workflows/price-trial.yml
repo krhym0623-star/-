@@ -1,0 +1,38 @@
+name: 5분 가격 관측 3회 시험
+
+on:
+  workflow_dispatch:
+    inputs:
+      keyword:
+        description: 관측할 검색어 (한 번에 최대 10개 검색 결과)
+        required: true
+        default: 삼성 SSD 1TB
+
+permissions:
+  contents: read
+
+jobs:
+  price-trial:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 코드 검사
+        run: node --test
+      - name: 지금·5분 후·10분 후 상품 가격 관측
+        env:
+          COUPANG_ACCESS_KEY: ${{ secrets.COUPANG_ACCESS_KEY }}
+          COUPANG_SECRET_KEY: ${{ secrets.COUPANG_SECRET_KEY }}
+          COUPANG_KEYWORD: ${{ inputs.keyword }}
+        run: node src/price-trial.mjs
+      - name: 관측 결과 보관
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapshots
+          path: trial-output/snapshots.json
+          if-no-files-found: ignore
+          retention-days: 7
