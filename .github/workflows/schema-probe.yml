@@ -1,0 +1,24 @@
+name: 상품 식별자 1회 진단
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  schema-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 코드 검사
+        run: node --test
+      - name: 상품 검색 1회 및 식별자 구조 요약
+        env:
+          COUPANG_ACCESS_KEY: ${{ secrets.COUPANG_ACCESS_KEY }}
+          COUPANG_SECRET_KEY: ${{ secrets.COUPANG_SECRET_KEY }}
+        run: node src/schema-probe.mjs
