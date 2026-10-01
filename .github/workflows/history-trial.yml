@@ -1,0 +1,53 @@
+name: 가격 이력 1회 누적 시험
+
+on:
+  workflow_dispatch:
+    inputs:
+      keyword:
+        description: 관측 검색어 (기본값을 유지하면 같은 상품의 이력이 이어집니다)
+        required: true
+        default: 삼성 SSD 1TB
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: coupon-price-history
+  cancel-in-progress: false
+
+jobs:
+  history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 코드 검사
+        run: node --test
+      - name: 직전 가격 기록 복원
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=price-history&per_page=100" \
+            --jq '[.artifacts[] | select(.expired == false)] | sort_by(.created_at, .id) | last | .workflow_run.id // empty')
+          if [ -n "$run_id" ]; then
+            mkdir -p history-output
+            gh run download "$run_id" -R "$GITHUB_REPOSITORY" -n price-history -D history-output
+            test -s history-output/state.json
+          fi
+      - name: 상품 검색 한 번과 이력 누적
+        env:
+          COUPANG_ACCESS_KEY: ${{ secrets.COUPANG_ACCESS_KEY }}
+          COUPANG_SECRET_KEY: ${{ secrets.COUPANG_SECRET_KEY }}
+          COUPANG_KEYWORD: ${{ inputs.keyword }}
+        run: node src/history-trial.mjs
+      - name: 이력과 수동 검토 후보 보관
+        uses: actions/upload-artifact@v4
+        with:
+          name: price-history
+          path: history-output/state.json
+          if-no-files-found: error
+          retention-days: 30
