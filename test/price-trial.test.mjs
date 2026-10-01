@@ -14,7 +14,8 @@ test('검색 요청을 서명하고 가격만 정규화한다', async () => {
     ] } }) };
   } });
   assert.equal(called, 1);
-  assert.deepEqual(products, [{ productId: '123', productName: 'SSD', price: 10000, isRocket: true, rank: null }]);
+  assert.deepEqual(products, [{ productId: '123', productName: 'SSD', price: 10000,
+    productUrl: null, isRocket: true, isFreeShipping: false, rank: null }]);
 });
 
 test('API 실패 시 재시도하거나 다음 회차를 호출하지 않는다', async () => {
