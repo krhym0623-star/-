@@ -26,7 +26,10 @@ export async function searchProducts({ accessKey, secretKey, keyword, fetcher = 
     const id = String(item?.productId ?? '');
     if (!id || !Number.isFinite(price) || price < 0) return [];
     return [{ productId: id, productName: String(item?.productName ?? '').slice(0, 180), price,
-      isRocket: item?.isRocket === true || item?.isRocket === 1, rank: Number(item?.rank) || null }];
+      productUrl: typeof item?.productUrl === 'string' ? item.productUrl : null,
+      isRocket: item?.isRocket === true || item?.isRocket === 1,
+      isFreeShipping: item?.isFreeShipping === true || item?.isFreeShipping === 1,
+      rank: Number(item?.rank) || null }];
   });
 }
 
