@@ -4,12 +4,36 @@ import { searchProducts } from './price-trial.mjs';
 import { median } from './deal-engine.mjs';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-export const emptyState = () => ({ version: 1, observations: [], reviewQueue: [] });
+const HOUR_MS = 60 * 60 * 1000;
+export const MIN_INTERVAL_MS = HOUR_MS;
+export const MAX_CALLS_PER_DAY = 8;
+export const emptyState = () => ({ version: 1, observations: [], reviewQueue: [], runs: [] });
 
-export function observe(state, products, { observedAt, keyword }) {
-  if (state?.version !== 1 || !Array.isArray(state.observations) || !Array.isArray(state.reviewQueue)) {
+export function validateState(state) {
+  if (state?.version !== 1 || !Array.isArray(state.observations) || !Array.isArray(state.reviewQueue) ||
+    (state.runs !== undefined && !Array.isArray(state.runs))) {
     throw new Error('이전 기록 형식이 올바르지 않습니다. 기록을 덮어쓰지 않습니다.');
   }
+}
+
+export function checkBudget(state, now) {
+  validateState(state);
+  const timestamp = now.getTime();
+  if (!Number.isFinite(timestamp)) throw new Error('관측 시각이 올바르지 않습니다.');
+  const priorRuns = [...new Set((state.runs ?? state.observations).map((row) => row.observedAt))]
+    .map((value) => Date.parse(value));
+  if (priorRuns.some((value) => !Number.isFinite(value) || value > timestamp)) {
+    throw new Error('이전 기록의 시각이 올바르지 않습니다. API 요청을 중단합니다.');
+  }
+  const recent = priorRuns.filter((value) => timestamp - value < DAY_MS);
+  if (recent.length >= MAX_CALLS_PER_DAY) throw new Error('24시간 관측 한도 8회에 도달했습니다. API 요청을 중단합니다.');
+  if (recent.length && timestamp - Math.max(...recent) < MIN_INTERVAL_MS) {
+    throw new Error('직전 관측 후 1시간이 지나지 않았습니다. API 요청을 중단합니다.');
+  }
+}
+
+export function observe(state, products, { observedAt, keyword }) {
+  validateState(state);
   const timestamp = Date.parse(observedAt);
   if (!Number.isFinite(timestamp)) throw new Error('관측 시각이 올바르지 않습니다.');
   const counts = new Map();
@@ -37,9 +61,7 @@ export function observe(state, products, { observedAt, keyword }) {
         const middle = median(prior.map((row) => row.price));
         const discountPct = middle > 0 ? (middle - record.price) / middle * 100 : 0;
         if (discountPct >= 15 && record.price < Math.min(...prior.map((row) => row.price))) {
-          // Product ID is not a stable option ID in this API. Queue for human
-          // checking; never call this a verified deal or post it automatically.
-          const key = `product:${record.productId}:${record.price}`;
+          const key = 'product:' + record.productId + ':' + record.price;
           if (!reviewQueue.some((entry) => entry.key === key)) {
             reviewQueue.push({ key, observedAt, keyword, productName: record.productName,
               price: record.price, baselineMedian: middle,
@@ -52,7 +74,10 @@ export function observe(state, products, { observedAt, keyword }) {
     }
     observations.push(record);
   }
-  return { state: { version: 1, observations, reviewQueue },
+  const runs = state.runs ?? [...new Set(state.observations.map((row) => row.observedAt))]
+    .map((time) => ({ observedAt: time, keyword: null, rows: state.observations.filter((row) => row.observedAt === time).length }));
+  return { state: { version: 1, observations, reviewQueue,
+    runs: [...runs, { observedAt, keyword, rows: products.length, ambiguousRows }] },
     stats: { rows: products.length, ambiguousRows, comparable, queued,
       observations: observations.length, pendingReview: reviewQueue.length } };
 }
@@ -65,9 +90,10 @@ export async function runHistoryTrial({ accessKey, secretKey, keyword, stateFile
     if (error?.code !== 'ENOENT') throw error;
     state = emptyState();
   }
-  // Only one API call. Never overwrite state if the request or validation fails.
+  const observedAt = now();
+  checkBudget(state, observedAt);
   const products = await search({ accessKey, secretKey, keyword });
-  const result = observe(state, products, { observedAt: now().toISOString(), keyword });
+  const result = observe(state, products, { observedAt: observedAt.toISOString(), keyword });
   await mkdir('history-output', { recursive: true });
   await writeFile(stateFile, JSON.stringify(result.state, null, 2) + '\n', { flag: 'w' });
   return result.stats;
