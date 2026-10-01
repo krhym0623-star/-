@@ -34,3 +34,17 @@ test('정확히 3회, 두 번의 5분 대기 후 같은 상품의 가격만 비�
   assert.equal(calls, 3);
   assert.deepEqual(snapshots.map(s => s.changes.length), [0, 1, 0]);
 });
+
+test('한 검색 결과의 중복 상품 ID는 옵션 구분이 안 되므로 가격 비교에서 제외한다', async () => {
+  let round = 0;
+  const snapshots = await runTrial({ keyword: 'test', wait: async () => {},
+    search: async () => {
+      round++;
+      if (round === 1) return [{ productId: '1', price: 100 }, { productId: '1', price: 80 }];
+      if (round === 2) return [{ productId: '1', price: 70 }];
+      return [{ productId: '1', price: 70 }, { productId: '1', price: 60 }];
+    }, now: () => new Date('2026-09-30T00:00:00Z') });
+  assert.deepEqual(snapshots.map(s => s.ambiguousRows), [2, 0, 2]);
+  assert.deepEqual(snapshots.map(s => s.matched), [0, 0, 0]);
+  assert.deepEqual(snapshots.map(s => s.changes), [[], [], []]);
+});
