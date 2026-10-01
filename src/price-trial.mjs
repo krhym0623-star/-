@@ -41,19 +41,26 @@ export async function runTrial({ accessKey, secretKey, keyword, search = searchP
     const observedAt = now().toISOString();
     let matched = 0;
     const changes = [];
-    for (const item of products) {
+    // Search results can contain several offers with the same productId, but
+    // this API response does not provide a stable option ID. Do not compare
+    // such rows against another offer or another round.
+    const counts = new Map();
+    for (const item of products) counts.set(item.productId, (counts.get(item.productId) ?? 0) + 1);
+    const unique = products.filter((item) => counts.get(item.productId) === 1);
+    for (const item of unique) {
       const before = previous.get(item.productId);
       if (before !== undefined) {
         matched++;
         if (before !== item.price) changes.push({ productId: item.productId, before, after: item.price });
       }
     }
-    const snapshot = { round, observedAt, keyword, count: products.length, matched,
+    const snapshot = { round, observedAt, keyword, count: products.length,
+      ambiguousRows: products.length - unique.length, matched,
       changes, products };
     snapshots.push(snapshot);
     onSnapshot(snapshot);
     previous.clear();
-    for (const item of products) previous.set(item.productId, item.price);
+    for (const item of unique) previous.set(item.productId, item.price);
   }
   return snapshots;
 }
@@ -65,7 +72,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       accessKey: process.env.COUPANG_ACCESS_KEY,
       secretKey: process.env.COUPANG_SECRET_KEY,
       keyword: process.env.COUPANG_KEYWORD || '삼성 SSD 1TB',
-      onSnapshot: (s) => console.log(`회차 ${s.round}: ${s.count}개 결과, 이전 회차와 동일 ID ${s.matched}개, 가격 변경 ${s.changes.length}개`),
+      onSnapshot: (s) => console.log(`회차 ${s.round}: ${s.count}개 결과, 옵션 구분 불가 ${s.ambiguousRows}행, 이전 회차와 비교 가능 ${s.matched}개, 가격 변경 ${s.changes.length}개`),
     });
     await fs.mkdir('trial-output', { recursive: true });
     await fs.writeFile('trial-output/snapshots.json', JSON.stringify(snapshots, null, 2) + '\n');
