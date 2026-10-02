@@ -2,6 +2,7 @@ import { pathToFileURL } from 'node:url';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { searchProducts } from './price-trial.mjs';
 import { median } from './deal-engine.mjs';
+import { AUTO_KEYWORD, selectKeyword } from './keyword-pool.mjs';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -78,12 +79,12 @@ export function observe(state, products, { observedAt, keyword }) {
     .map((time) => ({ observedAt: time, keyword: null, rows: state.observations.filter((row) => row.observedAt === time).length }));
   return { state: { version: 1, observations, reviewQueue,
     runs: [...runs, { observedAt, keyword, rows: products.length, ambiguousRows }] },
-    stats: { rows: products.length, ambiguousRows, comparable, queued,
+    stats: { keyword, rows: products.length, ambiguousRows, comparable, queued,
       observations: observations.length, pendingReview: reviewQueue.length } };
 }
 
-export async function runHistoryTrial({ accessKey, secretKey, keyword, stateFile = 'history-output/state.json',
-  search = searchProducts, now = () => new Date() }) {
+export async function runHistoryTrial({ accessKey, secretKey, keyword = AUTO_KEYWORD,
+  stateFile = 'history-output/state.json', search = searchProducts, now = () => new Date() }) {
   let state;
   try { state = JSON.parse(await readFile(stateFile, 'utf8')); }
   catch (error) {
@@ -92,8 +93,9 @@ export async function runHistoryTrial({ accessKey, secretKey, keyword, stateFile
   }
   const observedAt = now();
   checkBudget(state, observedAt);
-  const products = await search({ accessKey, secretKey, keyword });
-  const result = observe(state, products, { observedAt: observedAt.toISOString(), keyword });
+  const selectedKeyword = selectKeyword(state, keyword);
+  const products = await search({ accessKey, secretKey, keyword: selectedKeyword });
+  const result = observe(state, products, { observedAt: observedAt.toISOString(), keyword: selectedKeyword });
   await mkdir('history-output', { recursive: true });
   await writeFile(stateFile, JSON.stringify(result.state, null, 2) + '\n', { flag: 'w' });
   return result.stats;
@@ -103,7 +105,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   try {
     const stats = await runHistoryTrial({ accessKey: process.env.COUPANG_ACCESS_KEY,
       secretKey: process.env.COUPANG_SECRET_KEY,
-      keyword: process.env.COUPANG_KEYWORD || '삼성 SSD 1TB' });
+      keyword: process.env.COUPANG_KEYWORD || AUTO_KEYWORD });
     console.log(JSON.stringify(stats));
     console.log('후보는 수동 검토용이며 카카오톡으로 발송하지 않습니다.');
   } catch (error) {
