@@ -74,3 +74,21 @@ test('연속 수동 실행을 막을 때 실제 검색 API를 호출하지 않�
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('자동 순환은 아직 관측하지 않은 다음 품목을 API에 한 번 전달한다', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'coupon-history-'));
+  try {
+    const state = emptyState();
+    state.runs.push({ observedAt: '2026-10-01T00:00:00Z', keyword: '삼성 SSD 1TB', rows: 10 });
+    const stateFile = join(dir, 'state.json');
+    await writeFile(stateFile, JSON.stringify(state));
+    const keywords = [];
+    const stats = await runHistoryTrial({ stateFile, keyword: '자동 순환',
+      now: () => new Date('2026-10-01T01:00:00Z'),
+      search: async ({ keyword }) => { keywords.push(keyword); return [item(50)]; } });
+    assert.deepEqual(keywords, ['외장 SSD 1TB']);
+    assert.equal(stats.keyword, '외장 SSD 1TB');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
