@@ -92,3 +92,24 @@ test('자동 순환은 아직 관측하지 않은 다음 품목을 API에 한 �
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('품목 확대용 지표는 검색어 사이의 중복 ID와 재관측 가능 ID를 구분한다', () => {
+  let state = observe(emptyState(), [item(100), item(90, { productId: '2' }),
+    item(80, { productId: '3' }), item(70, { productId: '3' })],
+  { observedAt: '2026-10-01T00:00:00Z', keyword: 'SSD' }).state;
+  let result = observe(state, [item(95), item(60, { productId: '4' })],
+    { observedAt: '2026-10-02T00:00:00Z', keyword: 'SSD' });
+  assert.deepEqual(result.stats.coverage, {
+    uniqueProductIds: 4, newProductIds: 1, reobservedProductIds: 1,
+    repeatableProductIds: 1, perKeyword: { SSD: 4 },
+  });
+  state = result.state;
+  result = observe(state, [item(92), item(50, { productId: '5' })],
+    { observedAt: '2026-10-03T00:00:00Z', keyword: '외장 SSD' });
+  assert.deepEqual(result.stats.coverage, {
+    uniqueProductIds: 5, newProductIds: 1, reobservedProductIds: 1,
+    repeatableProductIds: 1, perKeyword: { SSD: 4, '외장 SSD': 2 },
+  });
+  assert.equal(result.stats.ambiguousRows, 0);
+  assert.equal(state.observations.filter((row) => row.ambiguous).length, 2);
+});
