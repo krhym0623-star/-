@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       keyword:
-        description: 관측 검색어 (기본값을 유지하면 같은 상품의 이력이 이어집니다)
+        description: 자동 순환을 유지하거나 직접 검색어를 입력하세요
         required: true
-        default: 삼성 SSD 1TB
+        default: 자동 순환
 
 permissions:
   contents: read
