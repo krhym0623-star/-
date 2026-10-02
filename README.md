@@ -27,9 +27,13 @@
 
 1. **Actions** → **가격 이력 1회 누적 시험** → **Run workflow**에서 `자동 순환`을 유지합니다.
 2. 마지막 성공 관측에서 **1시간 이상** 지나야 하며, 최근 24시간 성공 관측이 **8회 미만**이어야 합니다. 코드는 이를 API 요청 전에 검사합니다.
-3. 실행 로그의 `keyword`, `rows`, `ambiguousRows`, `observations`, `queued`를 확인합니다.
+3. 실행 로그의 `keyword`, `rows`, `ambiguousRows`, `observations`, `queued`, `coverage`를 확인합니다.
 4. **Artifacts**의 `price-history`에 `state.json`이 있고 `runs`, `observations`, `reviewQueue`가 저장됩니다. 다음 실행은 가장 최근 기록을 복원합니다.
 5. 아티팩트는 **30일 후 만료**됩니다. 영구 데이터베이스가 아닙니다.
+
+`coverage`는 기록 전체를 기준으로 계산됩니다. `uniqueProductIds`는 서로 다른 상품 ID 수, `newProductIds`와 `reobservedProductIds`는 이번 실행에서 처음 본 ID와 이전에도 본 ID 수입니다. `repeatableProductIds`는 같은 검색어·로켓 표시로 서로 다른 시각에 2회 이상 나타난 ID 수이며, `perKeyword`는 검색어별 서로 다른 ID 수입니다. 검색어 사이에 같은 ID가 중복될 수 있어 `perKeyword`의 합계가 전체 고유 ID 수보다 클 수 있습니다. 판매 옵션 ID가 없어 이 수치는 정확히 구분된 판매 옵션 수나 가격 변경 수가 아닙니다.
+
+아티팩트가 만료되거나 없어지면 누적 범위와 코드의 호출 제한 계산도 초기화됩니다. 계정에 적용되는 공식 API 호출 한도는 별도로 확인해야 합니다. GitHub Actions 자체의 상시 일정은 설정하지 않았습니다.
 
 ## 후보 판정의 한계
 
