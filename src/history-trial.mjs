@@ -33,6 +33,37 @@ export function checkBudget(state, now) {
   }
 }
 
+export function summarizeCoverage(state, currentKeyword, currentObservedAt) {
+  validateState(state);
+  const uniqueIds = new Set();
+  const previousIds = new Set();
+  const currentIds = new Set();
+  const appearances = new Map();
+  const keywords = new Map();
+  for (const row of state.observations) {
+    const id = String(row.productId ?? '').trim();
+    if (!id) continue;
+    uniqueIds.add(id);
+    const keyword = String(row.keyword ?? '');
+    if (!keywords.has(keyword)) keywords.set(keyword, new Set());
+    keywords.get(keyword).add(id);
+    if (row.observedAt === currentObservedAt && keyword === currentKeyword) currentIds.add(id);
+    else previousIds.add(id);
+    if (row.ambiguous) continue;
+    const key = JSON.stringify([keyword, id, row.isRocket === true]);
+    if (!appearances.has(key)) appearances.set(key, { id, times: new Set() });
+    appearances.get(key).times.add(row.observedAt);
+  }
+  return {
+    uniqueProductIds: uniqueIds.size,
+    newProductIds: [...currentIds].filter((id) => !previousIds.has(id)).length,
+    reobservedProductIds: [...currentIds].filter((id) => previousIds.has(id)).length,
+    repeatableProductIds: new Set([...appearances.values()]
+      .filter(({ times }) => times.size >= 2).map(({ id }) => id)).size,
+    perKeyword: Object.fromEntries([...keywords].map(([keyword, ids]) => [keyword, ids.size])),
+  };
+}
+
 export function observe(state, products, { observedAt, keyword }) {
   validateState(state);
   const timestamp = Date.parse(observedAt);
@@ -77,10 +108,12 @@ export function observe(state, products, { observedAt, keyword }) {
   }
   const runs = state.runs ?? [...new Set(state.observations.map((row) => row.observedAt))]
     .map((time) => ({ observedAt: time, keyword: null, rows: state.observations.filter((row) => row.observedAt === time).length }));
-  return { state: { version: 1, observations, reviewQueue,
-    runs: [...runs, { observedAt, keyword, rows: products.length, ambiguousRows }] },
+  const nextState = { version: 1, observations, reviewQueue,
+    runs: [...runs, { observedAt, keyword, rows: products.length, ambiguousRows }] };
+  return { state: nextState,
     stats: { keyword, rows: products.length, ambiguousRows, comparable, queued,
-      observations: observations.length, pendingReview: reviewQueue.length } };
+      observations: observations.length, pendingReview: reviewQueue.length,
+      coverage: summarizeCoverage(nextState, keyword, observedAt) } };
 }
 
 export async function runHistoryTrial({ accessKey, secretKey, keyword = AUTO_KEYWORD,
